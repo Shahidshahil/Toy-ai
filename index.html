@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Toy Alexa (Gemini)</title>
+</head>
+<body>
+  <h2>Toy Alexa using Gemini API</h2>
+  <p id="status">Say "toy Alexa" to wake me up.</p>
+
+  <script>
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recog = new SpeechRecognition();
+    recog.continuous = true;
+    recog.interimResults = false;
+    recog.lang = 'en-US';
+
+    const synth = window.speechSynthesis;
+
+    let listeningForQuery = false;
+
+    recog.onresult = async (evt) => {
+      const transcript = evt.results[evt.results.length - 1][0].transcript.trim().toLowerCase();
+      console.log('Heard:', transcript);
+
+      if (!listeningForQuery) {
+        if (transcript.includes('toy alexa')) {
+          listeningForQuery = true;
+          document.getElementById('status').innerText = '🔴 Listening for your question…';
+          setTimeout(() => recog.stop(), 500);
+        }
+      } else {
+        const question = transcript;
+        document.getElementById('status').innerText = `❓ You asked: "${question}"`;
+        listeningForQuery = false;
+
+        // Send question to Gemini
+        let answer = 'Sorry, I could not get a reply.';
+        try {
+          const resp = await fetch('https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=AIzaSyAIjF6MqMtowmvBDGBBKwvgrNGFR2TKA4w', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-goog-api-client': 'gl-web/1.0.0' // Important header for browser
+            },
+            body: JSON.stringify({
+              contents: [{
+                role: "user",
+                parts: [{ text: question }]
+              }]
+            })
+          });
+
+          const data = await resp.json();
+          console.log('API Raw:', data);
+          answer = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Sorry, I didn\'t understand.';
+        } catch (e) {
+          console.error('Error contacting Gemini:', e);
+        }
+
+        document.getElementById('status').innerText = `💬 Answer: "${answer}"`;
+
+        const uttr = new SpeechSynthesisUtterance(answer);
+        uttr.onend = () => {
+          document.getElementById('status').innerText = 'Say "toy Alexa" to wake me up.';
+          recog.start();
+        };
+        synth.speak(uttr);
+      }
+    };
+
+    recog.onend = () => {
+      if (!listeningForQuery) recog.start();
+    };
+
+    recog.start();
+  </script>
+</body>
+</html>
